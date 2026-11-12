@@ -1,0 +1,4 @@
+.venv/
+__pycache__/
+katalog/_draft/
+*.bak

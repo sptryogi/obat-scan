@@ -1,0 +1,192 @@
+[
+ {
+  "id": "OBT-01",
+  "nama": "Obat Biru Tablet 500 mg",
+  "kekuatan": 500,
+  "bentuk": "tablet",
+  "isi": 10,
+  "foto": [
+   "kotak_obat_01.jpg"
+  ],
+  "merk": "Medicine"
+ },
+ {
+  "id": "OBT-02",
+  "nama": "Obat Hijau Kapsul 250 mg",
+  "kekuatan": 250,
+  "bentuk": "kapsul",
+  "isi": 10,
+  "foto": [
+   "kotak_obat_02.jpg"
+  ],
+  "merk": "Medicine"
+ },
+ {
+  "id": "OBT-03",
+  "nama": "Obat Oranye Tablet 125 mg",
+  "kekuatan": 125,
+  "bentuk": "tablet",
+  "isi": 20,
+  "foto": [
+   "kotak_obat_03.jpg"
+  ],
+  "merk": "Medicine"
+ },
+ {
+  "id": "OBT-04",
+  "nama": "Obat Ungu Kapsul 100 mg",
+  "kekuatan": 100,
+  "bentuk": "kapsul",
+  "isi": 10,
+  "foto": [
+   "kotak_obat_04.jpg"
+  ],
+  "merk": "Medicine"
+ },
+ {
+  "id": "OBT-05A",
+  "nama": "Obat Merah Tablet 500 mg (isi 20)",
+  "kekuatan": 500,
+  "bentuk": "tablet",
+  "isi": 20,
+  "foto": [
+   {
+    "file": "kotak_obat_05.jpg",
+    "crop": [
+     10,
+     60,
+     300,
+     360
+    ]
+   }
+  ],
+  "merk": "Medicine"
+ },
+ {
+  "id": "OBT-05B",
+  "nama": "Obat Merah Tablet 500 mg (isi 10)",
+  "kekuatan": 500,
+  "bentuk": "tablet",
+  "isi": 10,
+  "foto": [
+   {
+    "file": "kotak_obat_05.jpg",
+    "crop": [
+     140,
+     165,
+     364,
+     395
+    ]
+   }
+  ],
+  "merk": "Medicine"
+ },
+ {
+  "id": "OBT-06",
+  "nama": "Obat Teal Kapsul 300 mg",
+  "kekuatan": 300,
+  "bentuk": "kapsul",
+  "isi": 10,
+  "foto": [
+   "kotak_obat_06.jpg"
+  ],
+  "merk": "Medicine"
+ },
+ {
+  "id": "OBT-07",
+  "nama": "Obat Kuning Tablet 200 mg",
+  "kekuatan": 200,
+  "bentuk": "tablet",
+  "isi": 20,
+  "foto": [
+   "kotak_obat_07.jpg"
+  ],
+  "merk": "Medicine"
+ },
+ {
+  "id": "OBT-08",
+  "nama": "Obat Navy Kapsul 150 mg",
+  "kekuatan": 150,
+  "bentuk": "kapsul",
+  "isi": 10,
+  "foto": [
+   "kotak_obat_08.jpg"
+  ],
+  "merk": "Medicine"
+ },
+ {
+  "id": "OBT-09",
+  "nama": "Interlac",
+  "kekuatan": null,
+  "bentuk": "tablet",
+  "isi": 10,
+  "foto": [
+   "OBT-09_6983.jpg"
+  ],
+  "merk": "Strawberry",
+  "barcode": [
+   "(90)SI154506071(91)250515",
+   "8997016510284"
+  ],
+  "warna": {
+   "nama": "oranye",
+   "hex": "#74462a"
+  }
+ },
+ {
+  "id": "OBT-10",
+  "nama": "Zoetis",
+  "kekuatan": 50,
+  "bentuk": "tablet",
+  "isi": 10,
+  "foto": [
+   "OBT-10_1.jpg"
+  ],
+  "merk": "Clavamx",
+  "barcode": [
+   "0087219012475"
+  ],
+  "warna": {
+   "nama": "oranye",
+   "hex": "#9f751e"
+  }
+ },
+ {
+  "id": "OBT-11",
+  "nama": "Anti Alergi",
+  "kekuatan": 10,
+  "bentuk": "tablet",
+  "isi": 10,
+  "foto": [
+   "OBT-11_1.jpg"
+  ],
+  "merk": "Claritin",
+  "barcode": [
+   "8994591007802",
+   "0984781007802"
+  ],
+  "warna": {
+   "nama": "oranye",
+   "hex": "#9c6d46"
+  }
+ },
+ {
+  "id": "OBT-12",
+  "nama": "Caffeine",
+  "kekuatan": 10,
+  "bentuk": "tablet",
+  "isi": 10,
+  "foto": [
+   "OBT-12_1.jpg"
+  ],
+  "merk": "Panadol",
+  "barcode": [
+   "8992695110206",
+   "(90)DBL9424502004A1(91)240827"
+  ],
+  "warna": {
+   "nama": "merah",
+   "hex": "#a6513c"
+  }
+ }
+]

@@ -1,0 +1,51 @@
+UJI LOKAL (laptop)
+1. python -m venv .venv && .venv\Scripts\activate      (Linux/Mac: source .venv/bin/activate)
+2. pip install -r requirements.txt
+3. python obat_match.py web
+4. Buka http://localhost:8000 di laptop (kamera laptop), tekan Mulai, arahkan kotak obat.
+
+UJI DARI HP (satu WiFi dengan laptop)
+   python obat_match.py web --https
+   Buka https://IP-LAPTOP:8000 di HP, terima peringatan sertifikat, tekan Mulai.
+
+ALUR SCAN (urutan)
+ 1. BARCODE dibaca dulu.  Ada di katalog -> langsung OK (approve), metode "barcode".
+ 2. Barcode tidak ada di katalog / tidak terbaca -> sistem membaca GAMBAR kemasan:
+      merk, nama obat, warna, kekuatan (mg), bentuk, isi  (+ desain kotak via SIFT).
+    Semua cocok = OK (hijau) | ada yang meragukan = CEK MANUAL (kuning) | tidak dikenali = abu-abu.
+ Panel di bawah kamera menampilkan tabel "Terbaca di kotak" vs "Di katalog" dengan tanda centang/silang per baris,
+ jadi petugas langsung tahu bagian mana yang cocok / tidak.
+ Barcode terbaca tapi belum terdaftar: hasil tetap ditentukan lewat gambar; set BARCODE_ASING_RAGU=1 bila ingin selalu "cek manual".
+
+UPDATE OBAT (3 cara, dari yang paling mudah)
+ A) DARI HALAMAN SCAN (paling cepat): obat kuning/tidak dikenali -> tekan "Perbaiki / daftarkan obat ini" -> pilih obat yang benar
+    -> foto yang sedang terlihat + barcode yang baru terbaca otomatis ditambahkan. Scan berikutnya langsung approve lewat barcode.
+    Obat baru -> "Daftarkan sebagai obat BARU" membuka form yang sudah terisi foto & barcode.
+ B) HALAMAN /tambah : pilih foto kemasan -> merk, nama, kekuatan, bentuk, isi, warna, barcode TERISI OTOMATIS (kolom hijau).
+    Cek, perbaiki bila perlu, Simpan. Ada saran bila foto buram / gelap / silau. Tab "Daftar & ubah": cari, ubah data, tambah barcode, hapus.
+    Hapus selalu menyisakan cadangan katalog.json.bak.
+ C) TERMINAL:  python obat_match.py tambah depan.jpg samping.jpg [--merk X --nama "Amoxicillin" --kekuatan 500 --bentuk tablet --isi 10 --barcode 899...]
+               python obat_match.py tambah foto_baru.jpg --id OBT-03 --barcode 899...   (tambah foto/barcode ke obat yang ada)
+               python obat_match.py daftar
+ Generator: membuat ID berikutnya, menyimpan foto, menulis katalog.json, memuat ulang katalog tanpa restart, menguji fotonya sendiri
+ dan memberi PERINGATAN bila mirip obat lain / belum dikenali jelas / barcode belum ada. Menolak obat yang sama persis dan barcode ganda.
+ Beri PIN dengan variabel ADMIN_PIN (berlaku untuk tambah, ubah, hapus).
+
+CATATAN LAMA (masih berlaku):
+ A) Lewat halaman:  http://localhost:8000/tambah   (atau tombol "+ obat" di halaman scan)
+    Pilih 1-3 foto kemasan -> kekuatan, bentuk, isi terisi otomatis dari tulisan di foto -> isi Nama -> Simpan.
+    Pilih obat yang sudah ada + foto baru = menambah foto ke obat itu (memperkuat pengenalan).
+ B) Lewat terminal:
+    python obat_match.py tambah foto_depan.jpg foto_samping.jpg --nama "Amoxicillin 500 mg"
+      (kekuatan, bentuk, isi dibaca otomatis dari foto; bisa ditimpa: --kekuatan 500 --bentuk tablet --isi 10)
+    python obat_match.py tambah foto_baru.jpg --id OBT-03        (tambah foto ke obat yang sudah ada)
+ Yang dilakukan generator: membuat ID berikutnya, menyimpan foto ke katalog/, menulis katalog.json, memuat ulang katalog
+ (tanpa restart), lalu menguji sendiri fotonya dan memberi PERINGATAN bila mirip obat lain atau belum dikenali jelas.
+ Menolak obat yang sama persis (nama+kekuatan+bentuk+isi). Beri PIN di halaman tambah dengan variabel ADMIN_PIN.
+
+TIPS FOTO KATALOG: terang, kotak memenuhi bingkai, tulisan nama dan kekuatan terbaca jelas, tanpa pantulan. 2-3 foto/obat
+(depan tegak + sedikit miring) sudah cukup. Obat yang berbeda hanya di tulisan kecil: pastikan tulisan itu terlihat jelas.
+
+UJI DARI TERMINAL (tanpa kamera):  python obat_match.py uji foto1.jpg foto2.jpg
+STATUS: ok = desain, tulisan, dan warna cocok | ragu = petugas wajib cek (kuning) | tidak = tidak dikenali.
+Ketelitian bisa diatur lewat variabel lingkungan: MIN_INLIER (14), RATIO_RAGU (0.6), WARNA_MAX (0.50), WARNA_BEDA (0.15).
