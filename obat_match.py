@@ -34,6 +34,11 @@ BARCODE_ASING_RAGU = os.environ.get("BARCODE_ASING_RAGU", "0") == "1"  # 1 = bar
 MAXSIDE = 640
 DRAFT = os.path.join(KAT, "_draft")
 
+USE_DB = bool(os.environ.get("DATABASE_URL"))
+if USE_DB:
+    import db
+_ver, _ver_at = None, 0.0
+
 _lock = threading.Lock()
 _sift = cv2.SIFT_create(nfeatures=1500)
 _bf = cv2.BFMatcher()
@@ -250,22 +255,59 @@ def _buat_entri(p, pasang):
             "thumb": (p["foto"][0] if isinstance(p["foto"][0], str) else p["foto"][0]["file"]) if p.get("foto") else None,
             "refs": [{"hist": h, "feat": f} for _, h, f in pasang]}
 
+def _baca_foto(fn):
+    if fn.startswith("db:"):
+        b = db.foto_ambil(int(fn[3:]))
+        return cv2.imdecode(np.frombuffer(b, np.uint8), cv2.IMREAD_COLOR) if b else None
+    return cv2.imread(os.path.join(KAT, fn))
+
+def _simpan_foto(oid, n, im):
+    buf = cv2.imencode(".jpg", im, [cv2.IMWRITE_JPEG_QUALITY, 85])[1].tobytes()
+    if USE_DB:
+        return "db:%d" % db.foto_tambah(oid, buf)
+    fn = f"{oid}_{n}.jpg"
+    while os.path.exists(os.path.join(KAT, fn)):
+        fn = f"{oid}_{uuid.uuid4().hex[:4]}.jpg"
+    open(os.path.join(KAT, fn), "wb").write(buf)
+    return fn
+
+def _hapus_file(fn):
+    if fn.startswith("db:"):
+        db.foto_hapus(int(fn[3:]))
+    elif os.path.exists(os.path.join(KAT, fn)):
+        os.remove(os.path.join(KAT, fn))
+
+def _segarkan():            # sinkronkan antar-instance: muat ulang katalog bila database berubah (dicek tiap 10 detik)
+    global _ver, _ver_at
+    if not USE_DB or time.time() - _ver_at < 10:
+        return
+    _ver_at = time.time()
+    v = db.versi()
+    if v != _ver:
+        _ver = v
+        load_catalog()
+
+def _catat_versi():         # dipanggil setelah menulis, agar instance ini tidak memuat ulang karena tulisannya sendiri
+    global _ver, _ver_at
+    if USE_DB:
+        _ver, _ver_at = db.versi(), time.time()
 
 def load_catalog():
     global CAT
-    CAT = []
-    for p in json.load(open(os.path.join(KAT, "katalog.json"), encoding="utf-8")):
+    baru = []                                   # was: CAT = []
+    for p in _baca_json():
         pasang = []
         for f in p["foto"]:
             fn, crop = (f, None) if isinstance(f, str) else (f["file"], f.get("crop"))
-            im = cv2.imread(os.path.join(KAT, fn))
+            im = _baca_foto(fn)
             if im is None:
                 raise SystemExit(f"Foto katalog tidak terbaca: {fn}")
             if crop:
                 im = im[crop[1]:crop[3], crop[0]:crop[2]]
             im = _resize(im)
             pasang.append((im, _hist(im), _feats(im)))
-        CAT.append(_buat_entri(p, pasang))
+        baru.append(_buat_entri(p, pasang))
+    CAT = baru
     _reindex()
     dobel = [k for k, v in _BC.items() if len(v) > 1]
     print(f"Katalog: {len(CAT)} obat, {sum(len(c['refs']) for c in CAT)} foto referensi, {len(_BC)} barcode"
@@ -288,6 +330,7 @@ def _bandingkan(a, b):
 
 def match(img, barcode=True):
     """img BGR -> dict(status ok|ragu|tidak, metode barcode|gambar, pilihan, kandidat, rincian, barcode, ocr, alasan, ms)"""
+    _segarkan()
     t0 = time.time()
     out = {"status": "tidak", "metode": None, "pilihan": None, "kandidat": [], "ocr": None, "alasan": [],
            "rincian": [], "barcode": None, "warna_terbaca": None}
@@ -379,10 +422,14 @@ _kat_lock = threading.Lock()
 
 
 def _baca_json():
+    if USE_DB: return db.baca_semua()        # di _baca_json
+    if USE_DB: return db.tulis_semua(data)   # di _tulis_json
     return json.load(open(os.path.join(KAT, "katalog.json"), encoding="utf-8"))
 
 
 def _tulis_json(data):
+    if USE_DB: return db.baca_semua()        # di _baca_json
+    if USE_DB: return db.tulis_semua(data)   # di _tulis_json
     path = os.path.join(KAT, "katalog.json")
     if os.path.exists(path):
         shutil.copyfile(path, path + ".bak")                  # cadangan versi sebelumnya
@@ -452,16 +499,14 @@ def tambah_obat(fotos, meta, obat_id=None):
             data.append(entry)
         pasang = []
         for im in imgs:
-            fn = f"{entry['id']}_{len(entry['foto']) + 1}.jpg"
-            while os.path.exists(os.path.join(KAT, fn)):
-                fn = f"{entry['id']}_{uuid.uuid4().hex[:4]}.jpg"
-            cv2.imwrite(os.path.join(KAT, fn), im, [cv2.IMWRITE_JPEG_QUALITY, 90])
+            fn = _simpan_foto(entry["id"], len(entry["foto"]) + 1, im)
             entry["foto"].append(fn)
             pasang.append((_resize(im), _hist(_resize(im)), _feats(_resize(im))))
         w = warna_info(pasang[0][0])
         if not isinstance(entry.get("warna"), dict):          # simpan nama + hex warna agar bisa dilihat/diubah petugas
             entry["warna"] = {"nama": entry.get("warna") or w["nama"], "hex": w["hex"]}
         _tulis_json(data)
+        _catat_versi()
         with _lock:                                           # perbarui katalog di memori tanpa restart
             cur = next((c for c in CAT if c["id"] == entry["id"]), None)
             if cur:
@@ -518,6 +563,7 @@ def ubah_obat(obat_id, meta):
             w = e.get("warna") if isinstance(e.get("warna"), dict) else {}
             e["warna"] = {"nama": meta["warna"].strip(), "hex": w.get("hex") or next((c["warna"]["hex"] for c in CAT if c["id"] == obat_id), "#9ca3af")}
         _tulis_json(data)
+        _catat_versi()
         with _lock:
             _sinkron(e)
     return {"id": e["id"], "nama": e["nama"]}
@@ -530,12 +576,13 @@ def hapus_obat(obat_id):
         if not e:
             raise ValueError(f"obat {obat_id} tidak ada")
         sisa = [p for p in data if p["id"] != obat_id]
-        _tulis_json(sisa)                                    # katalog.json.bak menyimpan versi sebelum dihapus
+        _tulis_json(sisa)
+        _catat_versi()                                    # katalog.json.bak menyimpan versi sebelum dihapus
         pakai = {(f if isinstance(f, str) else f["file"]) for p in sisa for f in p["foto"]}
         for f in e["foto"]:
             fn = f if isinstance(f, str) else f["file"]
-            if fn not in pakai and os.path.exists(os.path.join(KAT, fn)):
-                os.remove(os.path.join(KAT, fn))
+            if fn not in pakai: 
+                _hapus_file(fn)
         with _lock:
             CAT[:] = [c for c in CAT if c["id"] != obat_id]
             _reindex()
@@ -543,6 +590,7 @@ def hapus_obat(obat_id):
 
 
 def daftar_katalog():
+    _segarkan()
     return [{"id": c["id"], "nama": c["nama"], "merk": c.get("merk"), "kekuatan": c.get("kekuatan"), "bentuk": c.get("bentuk"),
              "isi": c.get("isi"), "barcode": c.get("barcode", []), "warna": c["warna"], "ukuran_kotak": c.get("ukuran_kotak"),
              "thumb": c.get("thumb"), "n_foto": len(c["refs"])} for c in CAT]
@@ -564,23 +612,24 @@ def analisa_foto(img):
 
 
 def simpan_draft(b):
-    """Simpan 1 frame sementara (dari halaman scan) agar bisa dijadikan foto katalog."""
-    os.makedirs(DRAFT, exist_ok=True)
-    for fn in os.listdir(DRAFT):                              # bersihkan draf > 1 hari
-        p = os.path.join(DRAFT, fn)
-        if time.time() - os.path.getmtime(p) > 86400:
-            os.remove(p)
     im = cv2.imdecode(np.frombuffer(b, np.uint8), cv2.IMREAD_COLOR)
     if im is None:
         raise ValueError("gambar tidak terbaca")
     tok = uuid.uuid4().hex[:12]
-    cv2.imwrite(os.path.join(DRAFT, tok + ".jpg"), _resize(im, 1000), [cv2.IMWRITE_JPEG_QUALITY, 90])
+    data = cv2.imencode(".jpg", _resize(im, 1000), [cv2.IMWRITE_JPEG_QUALITY, 90])[1].tobytes()
+    if USE_DB:
+        db.draft_simpan(tok, data)
+        return tok
+    os.makedirs(DRAFT, exist_ok=True)
+    open(os.path.join(DRAFT, tok + ".jpg"), "wb").write(data)
     return tok
 
 
 def baca_draft(tok):
     if not re.fullmatch(r"[0-9a-f]{12}", tok or ""):
         return None
+    if USE_DB:
+        return db.draft_ambil(tok)
     p = os.path.join(DRAFT, tok + ".jpg")
     return open(p, "rb").read() if os.path.exists(p) else None
 
@@ -603,6 +652,7 @@ def make_app():
 
     @app.post("/api/match")
     def api_match():
+
         img = _gambar()
         if img is None:
             return jsonify(error="gambar tidak terbaca"), 400
@@ -618,6 +668,9 @@ def make_app():
 
     @app.get("/foto/<path:fn>")
     def foto(fn):
+        if fn.startswith("db:"):
+            b = db.foto_ambil(int(fn[3:]))
+            return Response(b, mimetype="image/jpeg") if b else ("", 404)
         return send_from_directory(KAT, os.path.basename(fn))
 
     @app.post("/api/baca")                      # baca otomatis dari foto: barcode, merk, nama, kekuatan, bentuk, isi, warna
@@ -827,7 +880,7 @@ async function analisa(files){
   b.innerHTML=got?'Terbaca dari foto. Isian hijau = otomatis, <b>cek lalu ubah bila perlu</b>.':'Tulisan belum terbaca - isi manual atau ulangi foto lebih dekat/terang.';
   $('tips').innerHTML=tips.length?'<div class="box warn">⚠ '+tips.map(esc).join('<br>⚠ ')+'</div>':'';}
 $('fo').onchange=async()=>{FILES=[...$('fo').files].slice(0,3);thumbs();await analisa(FILES);};
-$('fb').onchange=async()=>{const f=$('fb').files[0];if(!f)return;const r=await (await fetch('/api/baca',{method:'POST',body:f})).json();
+$('fb').onchange=async()=>{const f=await kecil($('fb').files[0],1600);if(!f)return;const r=await (await fetch('/api/baca',{method:'POST',body:f})).json();
   if(r.barcode&&r.barcode.length){$('bc').value=r.barcode.join(', ');$('bc').classList.add('auto');$('a_bc').textContent='terbaca dari foto barcode';out('ok','Barcode terbaca: <b>'+esc(r.barcode.join(', '))+'</b>');}else out('warn','Barcode belum terbaca - dekatkan, terang, garis barcode lurus. Atau ketik manual.');};
 $('simpan').onclick=async()=>{if(!FILES.length)return out('err','Pilih foto kemasan dulu');
   const fd=new FormData();FILES.forEach(f=>fd.append('foto',f));fd.append('barcode',$('bc').value);
@@ -844,6 +897,10 @@ function ubah(id){const k=KAT.find(x=>x.id==id),e=$('e_'+id);if(e.innerHTML){e.i
   const f=(n,l,v)=>`<label>${l}</label><input id="${n}_${id}" value="${esc(v)}">`;
   e.innerHTML=f('merk','Merk',k.merk)+f('nama','Nama obat',k.nama)+`<div class="row"><div>${f('kek','Kekuatan (mg)',k.kekuatan)}</div><div>${f('isi','Isi',k.isi)}</div></div><div class="row"><div>${f('bentuk','Bentuk',k.bentuk)}</div><div>${f('warna','Warna',k.warna.nama)}</div></div>`+f('ukk','Ukuran kotak',k.ukuran_kotak)+f('bc','Barcode (pisahkan koma)',(k.barcode||[]).join(', '))+
    `<button onclick="simpanUbah('${id}')">Simpan perubahan</button><button class="red" onclick="hapus('${id}')">Hapus obat ini</button><div class="box" id="r_${id}" style="display:none"></div>`;}
+async function kecil(f,max=1000){const b=await createImageBitmap(f);const s=Math.min(1,max/Math.max(b.width,b.height));
+  const c=document.createElement('canvas');c.width=b.width*s;c.height=b.height*s;c.getContext('2d').drawImage(b,0,0,c.width,c.height);
+  return new Promise(r=>c.toBlob(x=>r(new File([x],'foto.jpg',{type:'image/jpeg'})),'image/jpeg',.85));}
+$('fo').onchange=async()=>{FILES=await Promise.all([...$('fo').files].slice(0,3).map(f=>kecil(f)));thumbs();await analisa(FILES);};
 async function simpanUbah(id){const g=n=>$(n+'_'+id).value;const body={merk:g('merk'),nama:g('nama'),kekuatan:g('kek'),isi:g('isi'),bentuk:g('bentuk'),warna:g('warna'),ukuran_kotak:g('ukk'),barcode:g('bc')};
   const r=await api('/api/ubah/'+id,{method:'POST',body:JSON.stringify(body),headers:{'Content-Type':'application/json'}});const j=await r.json();const o=$('r_'+id);o.style.display='block';
   if(j.error){o.className='box err';o.textContent=j.error;return;}o.className='box ok';o.textContent='✓ Tersimpan';await muat();daftar();}
@@ -888,6 +945,17 @@ if __name__ == "__main__":
                 meta["barcode"] = ",".join(kodes)
                 print("Barcode terbaca dari foto:", meta["barcode"])
         print(json.dumps(tambah_obat([open(x, "rb").read() for x in fl], meta, opt("--id")), ensure_ascii=False, indent=1))
+    elif a[0] == "migrasi":      # salin katalog.json + foto lokal ke database (jalankan SEKALI)
+        data = json.load(open(os.path.join(KAT, "katalog.json"), encoding="utf-8"))
+        for p in data:
+            baru = []
+            for f in p["foto"]:
+                fn, crop = (f, None) if isinstance(f, str) else (f["file"], f.get("crop"))
+                fid = "db:%d" % db.foto_tambah(p["id"], open(os.path.join(KAT, fn), "rb").read())
+                baru.append(fid if not crop else {"file": fid, "crop": crop})
+            p["foto"] = baru
+        db.tulis_semua(data)
+        print("Dipindahkan:", len(data), "obat")
     elif a[0] == "web":
         port = int(a[a.index("--port") + 1]) if "--port" in a else 8000
         ctx = "adhoc" if "--https" in a else None

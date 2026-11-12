@@ -2,5 +2,5 @@ numpy
 opencv-python-headless>=4.8
 flask>=3.0
 rapidocr-onnxruntime>=1.3
-cryptography        # hanya untuk mode --https (uji dari HP)
-zxing-cpp           # pembaca barcode (tahap 1)
+zxing-cpp
+psycopg[binary]>=3.1
